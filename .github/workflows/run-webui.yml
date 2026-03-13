@@ -1,0 +1,38 @@
+name: Run WebUI on GitHub Actions
+on: [workflow_dispatch]  # 手动触发，小白友好
+
+jobs:
+  run-webui:
+    runs-on: ubuntu-latest
+    steps:
+      # 1. 拉取仓库代码（包含你的webui.py）
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # 2. 安装Python 3.10（兼容大部分项目）
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      # 3. 安装依赖（包括ngrok隧道工具）
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          # 安装项目依赖（如果有requirements.txt）
+          if [ -f "requirements.txt" ]; then pip install -r requirements.txt; fi
+          # 安装ngrok（用于暴露Web UI到公网）
+          pip install ngrok
+
+      # 4. 启动Web UI并生成公网访问地址
+      - name: Run WebUI and expose with ngrok
+        run: |
+          # 后台启动webui.py（端口8000）
+          python webui.py &
+          # 等待5秒，确保Web UI启动完成
+          sleep 5
+          # 用ngrok暴露8000端口，输出公网地址
+          ngrok http 8000 --log=stdout
+        env:
+          # 引用你之前添加的ngrok令牌秘钥
+          NGROK_AUTH_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }}
