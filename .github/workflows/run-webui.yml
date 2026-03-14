@@ -1,38 +1,48 @@
 name: Run WebUI on GitHub Actions
-on: [workflow_dispatch]  # 手动触发，小白友好
+on: [workflow_dispatch]
+
+# 修复Node.js 20警告
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   run-webui:
     runs-on: ubuntu-latest
     steps:
-      # 1. 拉取仓库代码（包含你的webui.py）
+      # 1. 拉取代码（升级到兼容Node24的版本）
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v4.2.2
 
-      # 2. 安装Python 3.10（兼容大部分项目）
+      # 2. 安装Python（升级到兼容Node24的版本）
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v5.2.0
         with:
           python-version: '3.10'
+          cache: 'pip'  # 加速依赖安装
 
-      # 3. 安装依赖（包括ngrok隧道工具）
+      # 3. 修复ngrok安装方式（解决exit code 127）
       - name: Install dependencies
         run: |
+          # 升级pip
           python -m pip install --upgrade pip
-          # 安装项目依赖（如果有requirements.txt）
+          # 安装项目依赖（如果有）
           if [ -f "requirements.txt" ]; then pip install -r requirements.txt; fi
-          # 安装ngrok（用于暴露Web UI到公网）
-          pip install ngrok
+          # 改用官方方式安装ngrok（比pip更稳定）
+          curl -s https://ngrok-agent.s3.amazonaws.com/ngrok.asc | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null && echo "deb https://ngrok-agent.s3.amazonaws.com buster main" | sudo tee /etc/apt/sources.list.d/ngrok.list && sudo apt update && sudo apt install ngrok -y
 
-      # 4. 启动Web UI并生成公网访问地址
+      # 4. 启动Web UI并暴露端口（增加错误检查）
       - name: Run WebUI and expose with ngrok
         run: |
-          # 后台启动webui.py（端口8000）
+          # 先检查webui.py是否存在
+          if [ ! -f "webui.py" ]; then
+            echo "Error: webui.py not found!"
+            exit 1
+          fi
+          # 后台启动webui.py
           python webui.py &
-          # 等待5秒，确保Web UI启动完成
-          sleep 5
-          # 用ngrok暴露8000端口，输出公网地址
+          # 等待10秒（确保服务启动）
+          sleep 10
+          # 启动ngrok（输出公网地址）
           ngrok http 8000 --log=stdout
         env:
-          # 引用你之前添加的ngrok令牌秘钥
           NGROK_AUTH_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }}
